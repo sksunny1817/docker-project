@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from models.customer import Customer
 
-MOCK_SERVER_BASE_URL = os.getenv("MOCK_SERVER_BASE_URL", "http://localhost:5000")
+MOCK_SERVER_BASE_URL = os.getenv("MOCK_SERVER_BASE_URL", "http://mock-server:5000")
 PAGE_SIZE = 10
 
 
@@ -57,12 +57,24 @@ def fetch_all_customers() -> list[dict[str, Any]]:
 
 
 def run_dlt_pipeline(customers: list[dict[str, Any]]) -> None:
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise ValueError("DATABASE_URL is not set")
+
+    dlt.secrets["destination.postgres.credentials"] = database_url
+
     pipeline = dlt.pipeline(
         pipeline_name="customer_ingestion_pipeline",
         destination="postgres",
         dataset_name="public",
     )
-    pipeline.run(customers, table_name="customers", write_disposition="append")
+
+    # Load into a separate raw table so dlt metadata columns do not conflict
+    pipeline.run(
+        customers,
+        table_name="customers_raw",
+        write_disposition="replace",
+    )
 
 
 def upsert_customers(db: Session, customers: list[dict[str, Any]]) -> int:
@@ -72,6 +84,7 @@ def upsert_customers(db: Session, customers: list[dict[str, Any]]) -> int:
         return 0
 
     statement = insert(Customer).values(parsed_customers)
+
     update_columns = {
         "first_name": statement.excluded.first_name,
         "last_name": statement.excluded.last_name,
