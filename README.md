@@ -1,4 +1,4 @@
-# Acumen Backend Developer Assessment
+# Docker based project
 
 This project builds a small data pipeline using three Dockerized services:
 
